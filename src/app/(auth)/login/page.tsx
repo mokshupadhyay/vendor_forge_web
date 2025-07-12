@@ -49,6 +49,7 @@ export default function UnifiedLogin() {
     });
 
     const handleAccountTypeSelect = (type: AccountType) => {
+        console.log('Login account type selected:', type);
         setAccountType(type);
         reset();
     };

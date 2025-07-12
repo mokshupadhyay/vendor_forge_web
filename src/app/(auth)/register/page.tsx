@@ -96,6 +96,7 @@ export default function UnifiedRegister() {
     });
 
     const handleAccountTypeSelect = (type: AccountType) => {
+        console.log('Account type selected:', type);
         setAccountType(type);
         customerForm.reset();
         vendorForm.reset();
