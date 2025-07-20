@@ -24,11 +24,14 @@ import {
 
 export default function CustomerDiscovery() {
     const router = useRouter();
-
+    
     const handleLogout = () => {
         // TODO: Implement actual logout logic
         router.push('/login');
     };
+    const handleBrowse=()=>{
+        router.push('/browse');
+    }
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
@@ -139,7 +142,7 @@ export default function CustomerDiscovery() {
                                 <p className="text-slate-600 mb-6 max-w-md">
                                     Explore our marketplace to find verified vendors and high-quality products tailored to your needs.
                                 </p>
-                                <Button className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3">
+                                <Button className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 cursor-pointer" onClick={handleBrowse}>
                                     Browse All Vendors
                                 </Button>
                             </CardContent>
@@ -248,4 +251,4 @@ export default function CustomerDiscovery() {
             </main>
         </div>
     );
-} 
+}
