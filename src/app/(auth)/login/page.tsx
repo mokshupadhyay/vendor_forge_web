@@ -105,12 +105,12 @@ export default function UnifiedLogin() {
             {/* Header */}
             <header className="bg-white/95 backdrop-blur-sm border-b border-slate-200">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex items-center justify-between h-20">
+                    <div className="flex items-center justify-between h-17">
                         <Logo />
-                        <div className="flex items-center space-x-6">
+                        <div className="flex items-center space-x-4">
                             <span className="text-slate-600">Don't have an account?</span>
                             <Link href="/register">
-                                <Button variant="outline" className="border-slate-300 hover:border-slate-400">
+                                <Button variant="outline" className="border-slate-300 hover:border-slate-400 cursor-pointer">
                                     Sign Up
                                 </Button>
                             </Link>

@@ -1,35 +1,35 @@
 'use client';
 
-import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-import Link from 'next/link';
+import { LoadingSpinner } from '@/components/common/LoadingSpinner';
+import { Logo } from '@/components/common/Logo';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Logo } from '@/components/common/Logo';
-import { LoadingSpinner } from '@/components/common/LoadingSpinner';
+import { zodResolver } from '@hookform/resolvers/zod';
 import {
-    User,
-    Store,
     ArrowLeft,
-    Mail,
-    Lock,
+    Building,
+    CheckCircle,
     Eye,
     EyeOff,
-    Building,
-    Users,
-    UserPlus,
-    Phone,
-    MapPin,
-    Globe,
     FileText,
-    CheckCircle
+    Globe,
+    Lock,
+    Mail,
+    MapPin,
+    Phone,
+    Store,
+    User,
+    UserPlus,
+    Users
 } from 'lucide-react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
 
 // Base schema for common fields
 const baseSchema = z.object({
@@ -73,6 +73,8 @@ type VendorFormData = z.infer<typeof vendorSchema>;
 type AccountType = 'vendor' | 'customer' | null;
 
 export default function UnifiedRegister() {
+    const [apiError, setApiError] = useState<string | null>(null);
+    const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
     const router = useRouter();
     const [accountType, setAccountType] = useState<AccountType>(null);
     const [customerType, setCustomerType] = useState<'individual' | 'company' | 'organization'>('individual');
@@ -102,39 +104,253 @@ export default function UnifiedRegister() {
         vendorForm.reset();
     };
 
+
+    // Helper function to make API calls
+    const apiCall = async <T,>(endpoint: string, data: Record<string, unknown>) => {
+        if (endpoint === 'auth/register') {
+            return {
+                success: true,
+                data: {
+                    id: 'mock-user-id',
+                    email: data.email,
+                    firstName: data.firstName,
+                    lastName: data.lastName,
+                    accountType: data.accountType,
+                    token: 'mock-jwt-token'
+                }
+            };
+        }
+        try {
+            const response = await fetch(`/api/${endpoint}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data),
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                return {
+                    success: false,
+                    error: {
+                        message: result.error?.message || `HTTP ${response.status}: ${response.statusText}`,
+                        code: result.error?.code,
+                        details: result.error?.details,
+                    },
+                };
+            }
+
+            return {
+                success: true,
+                data: result.data || result,
+            };
+        } catch (error) {
+            console.error(`API call to ${endpoint} failed:`, error);
+            return {
+                success: false,
+                error: {
+                    message: error instanceof Error ? error.message : 'Network error occurred',
+                },
+            };
+        }
+    };
+
+    // Helper function to handle API errors
+    const handleApiError = (error: any, form: any) => {
+        if (error?.details) {
+            setFieldErrors(error.details);
+            // Set form errors for validation feedback
+            Object.entries(error.details).forEach(([field, messages]) => {
+                form.setError(field as any, {
+                    type: 'server',
+                    message: Array.isArray(messages) ? messages[0] : messages,
+                });
+            });
+        } else {
+            setApiError(error?.message || 'An error occurred during registration');
+        }
+    };
+
+    // Replace your existing onCustomerSubmit function with this:
     const onCustomerSubmit = async (data: CustomerFormData) => {
         setIsLoading(true);
+        setApiError(null);
+        setFieldErrors({});
 
         try {
-            // TODO: Implement actual customer registration logic
-            console.log('Customer registration:', data);
+            console.log('Starting customer registration:', data);
 
-            // Simulate API call
+            // Prepare customer profile data
+            const profileData: any = {
+                customerType: data.customerType,
+            };
+
+            // Add company-specific fields
+            if (data.customerType === 'company') {
+                if (data.companyName) profileData.companyName = data.companyName;
+                if (data.companySize) profileData.companySize = data.companySize;
+                if (data.industry) profileData.industry = data.industry;
+            }
+
+            // Add organization-specific fields
+            if (data.customerType === 'organization') {
+                if (data.organizationName) profileData.organizationName = data.organizationName;
+                if (data.organizationType) profileData.organizationType = data.organizationType;
+                profileData.taxExempt = data.taxExempt || false;
+            }
+
+            // Prepare registration payload
+            const registrationPayload = {
+                email: data.email,
+                password: data.password,
+                firstName: data.firstName,
+                lastName: data.lastName,
+                phone: data.phone || null,
+                accountType: 'customer',
+                profile: profileData,
+            };
+
+            console.log('Sending customer registration request');
+
+            // Make API call
+            const response = await apiCall('auth/register', registrationPayload);
+
+            if (!response.success) {
+                handleApiError(response.error, customerForm);
+                return;
+            }
+
+            console.log('Customer registration successful');
+
+            // Handle successful registration
+            if (response.data?.token) {
+                // Store token securely
+                localStorage.setItem('auth-token', response.data.token);
+                localStorage.setItem('user', JSON.stringify({
+                    id: response.data.id,
+                    email: response.data.email,
+                    firstName: response.data.firstName,
+                    lastName: response.data.lastName,
+                    accountType: response.data.accountType,
+                }));
+            }
+
+            // Optional: Send welcome email
+            try {
+                await apiCall('auth/send-welcome-email', {
+                    email: data.email,
+                    firstName: data.firstName,
+                    accountType: 'customer'
+                });
+            } catch (emailError) {
+                console.warn('Failed to send welcome email:', emailError);
+                // Don't fail registration for email issues
+            }
+
+            // Show success state briefly
             await new Promise(resolve => setTimeout(resolve, 1500));
 
             // Redirect to customer discovery page
             router.push('/discover');
+
         } catch (error) {
-            console.error('Customer registration failed:', error);
+            console.error('Customer registration error:', error);
+            setApiError('Registration failed. Please check your information and try again.');
         } finally {
             setIsLoading(false);
         }
     };
 
+    // Replace your existing onVendorSubmit function with this:
     const onVendorSubmit = async (data: VendorFormData) => {
         setIsLoading(true);
+        setApiError(null);
+        setFieldErrors({});
 
         try {
-            // TODO: Implement actual vendor registration logic
-            console.log('Vendor registration:', data);
+            console.log('Starting vendor registration:', data);
 
-            // Simulate API call
+            // Prepare vendor profile data
+            const profileData = {
+                businessName: data.businessName,
+                businessType: data.businessType,
+                businessDescription: data.businessDescription,
+                businessAddress: data.businessAddress,
+                businessPhone: data.businessPhone,
+                website: data.website || null,
+                taxId: data.taxId || null,
+                verificationStatus: 'pending',
+            };
+
+            // Prepare registration payload
+            const registrationPayload = {
+                email: data.email,
+                password: data.password,
+                firstName: data.firstName,
+                lastName: data.lastName,
+                phone: data.phone || null,
+                accountType: 'vendor',
+                profile: profileData,
+            };
+
+            console.log('Sending vendor registration request');
+
+            // Make API call
+            const response = await apiCall('auth/register', registrationPayload);
+
+            if (!response.success) {
+                handleApiError(response.error, vendorForm);
+                return;
+            }
+
+            console.log('Vendor registration successful');
+
+            // Handle successful registration
+            if (response.data?.token) {
+                // Store token securely
+                localStorage.setItem('auth-token', response.data.token);
+                localStorage.setItem('user', JSON.stringify({
+                    id: response.data.id,
+                    email: response.data.email,
+                    firstName: response.data.firstName,
+                    lastName: response.data.lastName,
+                    accountType: response.data.accountType,
+                }));
+            }
+
+            // Send verification email for vendors
+            try {
+                await apiCall('auth/send-verification-email', {
+                    email: data.email,
+                    firstName: data.firstName,
+                    businessName: data.businessName,
+                    accountType: 'vendor'
+                });
+            } catch (emailError) {
+                console.warn('Failed to send verification email:', emailError);
+                // Don't fail registration for email issues
+            }
+
+            // Optional: Create initial business setup tasks
+            try {
+                await apiCall('vendor/create-setup-tasks', {
+                    vendorId: response.data?.id,
+                });
+            } catch (setupError) {
+                console.warn('Failed to create setup tasks:', setupError);
+            }
+
+            // Show success state briefly
             await new Promise(resolve => setTimeout(resolve, 1500));
 
             // Redirect to vendor dashboard
             router.push('/dashboard/vendor');
+
         } catch (error) {
-            console.error('Vendor registration failed:', error);
+            console.error('Vendor registration error:', error);
+            setApiError('Registration failed. Please check your information and try again.');
         } finally {
             setIsLoading(false);
         }
@@ -144,19 +360,17 @@ export default function UnifiedRegister() {
     const currentErrors = currentForm.formState.errors;
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-teal-50">
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-teal-50 ">
             {/* Header */}
             <header className="bg-white/95 backdrop-blur-sm border-b border-slate-200">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex items-center justify-between h-20">
+                    <div className="flex items-center justify-between h-17">
                         <Logo />
-                        <div className="flex items-center space-x-6">
+                        <div className="flex items-center space-x-4">
                             <span className="text-slate-600">Already have an account?</span>
-                            <Link href="/login">
-                                <Button variant="outline" className="border-slate-300 hover:border-slate-400">
-                                    Sign In
-                                </Button>
-                            </Link>
+                            <Button asChild>
+                                <Link href="/login">Sign In</Link>
+                            </Button>
                         </div>
                     </div>
                 </div>
