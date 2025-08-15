@@ -26,9 +26,6 @@ export default function HomePage() {
           <div className="flex justify-between items-center h-16">
             <Logo size="md" />
             <div className="flex items-center space-x-4">
-              <Link href="/login" className="text-gray-600 hover:text-gray-900">
-                Sign in
-              </Link>
               <Button asChild>
                 <Link href="/register">Get Started</Link>
               </Button>
