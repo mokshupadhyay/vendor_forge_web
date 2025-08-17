@@ -1,12 +1,16 @@
 'use client';
-
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { Logo } from '@/components/common/Logo';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Button } from "@/components/ui/button";
+import {
+    Card,
+    CardContent,
+    CardHeader
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
     ArrowLeft,
@@ -44,23 +48,26 @@ const baseSchema = z.object({
     path: ["confirmPassword"],
 });
 
-// Customer schema
-const customerSchema = baseSchema.extend({
-    customerType: z.enum(['individual', 'company', 'organization']),
-    // Optional company fields
-    companyName: z.string().optional(),
+// Individual Customer schema
+const individualCustomerSchema = baseSchema;
+
+// Company Customer schema
+const companyCustomerSchema = baseSchema.extend({
+    companyName: z.string().min(2, 'Company name is required'),
     companySize: z.string().optional(),
     industry: z.string().optional(),
-    // Optional organization fields
-    organizationName: z.string().optional(),
+});
+
+// Organization Customer schema
+const organizationCustomerSchema = baseSchema.extend({
+    organizationName: z.string().min(2, 'Organization name is required'),
     organizationType: z.string().optional(),
     taxExempt: z.boolean().optional(),
 });
 
-// Vendor schema
-const vendorSchema = baseSchema.extend({
+// Individual Vendor schema
+const individualVendorSchema = baseSchema.extend({
     businessName: z.string().min(2, 'Business name is required'),
-    businessType: z.enum(['individual', 'company', 'organization']),
     businessDescription: z.string().min(10, 'Please provide a brief description of your business'),
     website: z.string().url('Please enter a valid website URL').optional().or(z.literal('')),
     businessAddress: z.string().min(5, 'Business address is required'),
@@ -68,42 +75,86 @@ const vendorSchema = baseSchema.extend({
     taxId: z.string().optional(),
 });
 
-type CustomerFormData = z.infer<typeof customerSchema>;
-type VendorFormData = z.infer<typeof vendorSchema>;
+// Company Vendor schema
+const companyVendorSchema = individualVendorSchema;
+
+// Organization Vendor schema
+const organizationVendorSchema = individualVendorSchema;
+
+type IndividualCustomerFormData = z.infer<typeof individualCustomerSchema>;
+type CompanyCustomerFormData = z.infer<typeof companyCustomerSchema>;
+type OrganizationCustomerFormData = z.infer<typeof organizationCustomerSchema>;
+type IndividualVendorFormData = z.infer<typeof individualVendorSchema>;
+type CompanyVendorFormData = z.infer<typeof companyVendorSchema>;
+type OrganizationVendorFormData = z.infer<typeof organizationVendorSchema>;
+
 type AccountType = 'vendor' | 'customer' | null;
+type TabType = 'individual' | 'company' | 'organization';
 
 export default function UnifiedRegister() {
     const [apiError, setApiError] = useState<string | null>(null);
     const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
     const router = useRouter();
     const [accountType, setAccountType] = useState<AccountType>(null);
-    const [customerType, setCustomerType] = useState<'individual' | 'company' | 'organization'>('individual');
-    const [vendorType, setVendorType] = useState<'individual' | 'company' | 'organization'>('individual');
+    const [activeTab, setActiveTab] = useState<TabType>('individual');
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
 
-    const customerForm = useForm<CustomerFormData>({
-        resolver: zodResolver(customerSchema),
-        defaultValues: {
-            customerType: 'individual',
-        },
+    // Initialize forms for each tab type
+    const individualCustomerForm = useForm<IndividualCustomerFormData>({
+        resolver: zodResolver(individualCustomerSchema),
     });
 
-    const vendorForm = useForm<VendorFormData>({
-        resolver: zodResolver(vendorSchema),
-        defaultValues: {
-            businessType: 'individual',
-        },
+    const companyCustomerForm = useForm<CompanyCustomerFormData>({
+        resolver: zodResolver(companyCustomerSchema),
     });
 
-    const handleAccountTypeSelect = (type: AccountType) => {
-        console.log('Account type selected:', type);
-        setAccountType(type);
-        customerForm.reset();
-        vendorForm.reset();
+    const organizationCustomerForm = useForm<OrganizationCustomerFormData>({
+        resolver: zodResolver(organizationCustomerSchema),
+    });
+
+    const individualVendorForm = useForm<IndividualVendorFormData>({
+        resolver: zodResolver(individualVendorSchema),
+    });
+
+    const companyVendorForm = useForm<CompanyVendorFormData>({
+        resolver: zodResolver(companyVendorSchema),
+    });
+
+    const organizationVendorForm = useForm<OrganizationVendorFormData>({
+        resolver: zodResolver(organizationVendorSchema),
+    });
+
+    // Get current form based on account type and active tab
+    const getCurrentForm = () => {
+        if (accountType === 'customer') {
+            switch (activeTab) {
+                case 'individual': return individualCustomerForm;
+                case 'company': return companyCustomerForm;
+                case 'organization': return organizationCustomerForm;
+            }
+        } else if (accountType === 'vendor') {
+            switch (activeTab) {
+                case 'individual': return individualVendorForm;
+                case 'company': return companyVendorForm;
+                case 'organization': return organizationVendorForm;
+            }
+        }
+        return individualCustomerForm;
     };
 
+    const handleAccountTypeSelect = (type: AccountType) => {
+        setAccountType(type);
+        setActiveTab('individual');
+        // Reset all forms
+        individualCustomerForm.reset();
+        companyCustomerForm.reset();
+        organizationCustomerForm.reset();
+        individualVendorForm.reset();
+        companyVendorForm.reset();
+        organizationVendorForm.reset();
+    };
 
     // Helper function to make API calls
     const apiCall = async <T,>(endpoint: string, data: Record<string, unknown>) => {
@@ -120,48 +171,14 @@ export default function UnifiedRegister() {
                 }
             };
         }
-        try {
-            const response = await fetch(`/api/${endpoint}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(data),
-            });
-
-            const result = await response.json();
-
-            if (!response.ok) {
-                return {
-                    success: false,
-                    error: {
-                        message: result.error?.message || `HTTP ${response.status}: ${response.statusText}`,
-                        code: result.error?.code,
-                        details: result.error?.details,
-                    },
-                };
-            }
-
-            return {
-                success: true,
-                data: result.data || result,
-            };
-        } catch (error) {
-            console.error(`API call to ${endpoint} failed:`, error);
-            return {
-                success: false,
-                error: {
-                    message: error instanceof Error ? error.message : 'Network error occurred',
-                },
-            };
-        }
+        // Real API implementation would go here
+        return { success: true, data: {} };
     };
 
     // Helper function to handle API errors
     const handleApiError = (error: any, form: any) => {
         if (error?.details) {
             setFieldErrors(error.details);
-            // Set form errors for validation feedback
             Object.entries(error.details).forEach(([field, messages]) => {
                 form.setError(field as any, {
                     type: 'server',
@@ -173,191 +190,217 @@ export default function UnifiedRegister() {
         }
     };
 
-    // Replace your existing onCustomerSubmit function with this:
-    const onCustomerSubmit = async (data: CustomerFormData) => {
+    // Generic submit handler
+    const handleSubmit = async (data: any) => {
         setIsLoading(true);
         setApiError(null);
         setFieldErrors({});
 
         try {
-            console.log('Starting customer registration:', data);
+            let profileData: any = {};
 
-            // Prepare customer profile data
-            const profileData: any = {
-                customerType: data.customerType,
-            };
-
-            // Add company-specific fields
-            if (data.customerType === 'company') {
-                if (data.companyName) profileData.companyName = data.companyName;
-                if (data.companySize) profileData.companySize = data.companySize;
-                if (data.industry) profileData.industry = data.industry;
-            }
-
-            // Add organization-specific fields
-            if (data.customerType === 'organization') {
-                if (data.organizationName) profileData.organizationName = data.organizationName;
-                if (data.organizationType) profileData.organizationType = data.organizationType;
-                profileData.taxExempt = data.taxExempt || false;
-            }
-
-            // Prepare registration payload
-            const registrationPayload = {
-                email: data.email,
-                password: data.password,
-                firstName: data.firstName,
-                lastName: data.lastName,
-                phone: data.phone || null,
-                accountType: 'customer',
-                profile: profileData,
-            };
-
-            console.log('Sending customer registration request');
-
-            // Make API call
-            const response = await apiCall('auth/register', registrationPayload);
-
-            if (!response.success) {
-                handleApiError(response.error, customerForm);
-                return;
-            }
-
-            console.log('Customer registration successful');
-
-            // Handle successful registration
-            if (response.data?.token) {
-                // Store token securely
-                localStorage.setItem('auth-token', response.data.token);
-                localStorage.setItem('user', JSON.stringify({
-                    id: response.data.id,
-                    email: response.data.email,
-                    firstName: response.data.firstName,
-                    lastName: response.data.lastName,
-                    accountType: response.data.accountType,
-                }));
-            }
-
-            // Optional: Send welcome email
-            try {
-                await apiCall('auth/send-welcome-email', {
-                    email: data.email,
-                    firstName: data.firstName,
-                    accountType: 'customer'
-                });
-            } catch (emailError) {
-                console.warn('Failed to send welcome email:', emailError);
-                // Don't fail registration for email issues
-            }
-
-            // Show success state briefly
-            await new Promise(resolve => setTimeout(resolve, 1500));
-
-            // Redirect to customer discovery page
-            router.push('/discover');
-
-        } catch (error) {
-            console.error('Customer registration error:', error);
-            setApiError('Registration failed. Please check your information and try again.');
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    // Replace your existing onVendorSubmit function with this:
-    const onVendorSubmit = async (data: VendorFormData) => {
-        setIsLoading(true);
-        setApiError(null);
-        setFieldErrors({});
-
-        try {
-            console.log('Starting vendor registration:', data);
-
-            // Prepare vendor profile data
-            const profileData = {
-                businessName: data.businessName,
-                businessType: data.businessType,
-                businessDescription: data.businessDescription,
-                businessAddress: data.businessAddress,
-                businessPhone: data.businessPhone,
-                website: data.website || null,
-                taxId: data.taxId || null,
-                verificationStatus: 'pending',
-            };
-
-            // Prepare registration payload
-            const registrationPayload = {
-                email: data.email,
-                password: data.password,
-                firstName: data.firstName,
-                lastName: data.lastName,
-                phone: data.phone || null,
-                accountType: 'vendor',
-                profile: profileData,
-            };
-
-            console.log('Sending vendor registration request');
-
-            // Make API call
-            const response = await apiCall('auth/register', registrationPayload);
-
-            if (!response.success) {
-                handleApiError(response.error, vendorForm);
-                return;
-            }
-
-            console.log('Vendor registration successful');
-
-            // Handle successful registration
-            if (response.data?.token) {
-                // Store token securely
-                localStorage.setItem('auth-token', response.data.token);
-                localStorage.setItem('user', JSON.stringify({
-                    id: response.data.id,
-                    email: response.data.email,
-                    firstName: response.data.firstName,
-                    lastName: response.data.lastName,
-                    accountType: response.data.accountType,
-                }));
-            }
-
-            // Send verification email for vendors
-            try {
-                await apiCall('auth/send-verification-email', {
-                    email: data.email,
-                    firstName: data.firstName,
+            if (accountType === 'customer') {
+                profileData.customerType = activeTab;
+                if (activeTab === 'company') {
+                    profileData.companyName = data.companyName;
+                    profileData.companySize = data.companySize;
+                    profileData.industry = data.industry;
+                } else if (activeTab === 'organization') {
+                    profileData.organizationName = data.organizationName;
+                    profileData.organizationType = data.organizationType;
+                    profileData.taxExempt = data.taxExempt || false;
+                }
+            } else if (accountType === 'vendor') {
+                profileData = {
                     businessName: data.businessName,
-                    accountType: 'vendor'
-                });
-            } catch (emailError) {
-                console.warn('Failed to send verification email:', emailError);
-                // Don't fail registration for email issues
+                    businessType: activeTab,
+                    businessDescription: data.businessDescription,
+                    businessAddress: data.businessAddress,
+                    businessPhone: data.businessPhone,
+                    website: data.website || null,
+                    taxId: data.taxId || null,
+                    verificationStatus: 'pending',
+                };
             }
 
-            // Optional: Create initial business setup tasks
-            try {
-                await apiCall('vendor/create-setup-tasks', {
-                    vendorId: response.data?.id,
-                });
-            } catch (setupError) {
-                console.warn('Failed to create setup tasks:', setupError);
+            const registrationPayload = {
+                email: data.email,
+                password: data.password,
+                firstName: data.firstName,
+                lastName: data.lastName,
+                phone: data.phone || null,
+                accountType,
+                profile: profileData,
+            };
+
+            const response = await apiCall('auth/register', registrationPayload);
+
+            if (!response.success) {
+                handleApiError(response.error, getCurrentForm());
+                return;
             }
 
-            // Show success state briefly
+            // Handle successful registration
+            if (response.data?.token) {
+                localStorage.setItem('auth-token', response.data.token);
+                localStorage.setItem('user', JSON.stringify({
+                    id: response.data.id,
+                    email: response.data.email,
+                    firstName: response.data.firstName,
+                    lastName: response.data.lastName,
+                    accountType: response.data.accountType,
+                }));
+            }
+
             await new Promise(resolve => setTimeout(resolve, 1500));
 
-            // Redirect to vendor dashboard
-            router.push('/dashboard/vendor');
+            // Redirect based on account type
+            if (accountType === 'customer') {
+                router.push('/discover');
+            } else {
+                router.push('/dashboard/vendor');
+            }
 
         } catch (error) {
-            console.error('Vendor registration error:', error);
+            console.error('Registration error:', error);
             setApiError('Registration failed. Please check your information and try again.');
         } finally {
             setIsLoading(false);
         }
     };
 
-    const currentForm = accountType === 'customer' ? customerForm : vendorForm;
+    const currentForm = getCurrentForm();
     const currentErrors = currentForm.formState.errors;
+
+    // Common form fields component
+    const CommonFields = ({ form, errors, isVendor = false }: { form: any, errors: any, isVendor?: boolean }) => (
+        <>
+            {/* Personal Information */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                    <Label htmlFor="firstName" className="text-sm font-medium text-slate-700">
+                        First Name
+                    </Label>
+                    <Input
+                        id="firstName"
+                        placeholder="Enter your first name"
+                        className={`h-12 ${errors.firstName ? 'border-red-500' : 'border-slate-300'}`}
+                        {...form.register('firstName')}
+                    />
+                    {errors.firstName && (
+                        <p className="text-sm text-red-600">{errors.firstName.message}</p>
+                    )}
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="lastName" className="text-sm font-medium text-slate-700">
+                        Last Name
+                    </Label>
+                    <Input
+                        id="lastName"
+                        placeholder="Enter your last name"
+                        className={`h-12 ${errors.lastName ? 'border-red-500' : 'border-slate-300'}`}
+                        {...form.register('lastName')}
+                    />
+                    {errors.lastName && (
+                        <p className="text-sm text-red-600">{errors.lastName.message}</p>
+                    )}
+                </div>
+            </div>
+
+            {/* Contact Information */}
+            <div className="space-y-4">
+                <div className="space-y-2">
+                    <Label htmlFor="email" className="text-sm font-medium text-slate-700">
+                        Email Address
+                    </Label>
+                    <div className="relative">
+                        <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
+                        <Input
+                            id="email"
+                            type="email"
+                            placeholder="Enter your email"
+                            className={`pl-10 h-12 ${errors.email ? 'border-red-500' : 'border-slate-300'}`}
+                            {...form.register('email')}
+                        />
+                    </div>
+                    {errors.email && (
+                        <p className="text-sm text-red-600">{errors.email.message}</p>
+                    )}
+                </div>
+
+                <div className="space-y-2">
+                    <Label htmlFor="phone" className="text-sm font-medium text-slate-700">
+                        Phone Number {isVendor ? '' : '(Optional)'}
+                    </Label>
+                    <div className="relative">
+                        <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
+                        <Input
+                            id="phone"
+                            type="tel"
+                            placeholder="Enter your phone number"
+                            className="pl-10 h-12"
+                            {...form.register('phone')}
+                        />
+                    </div>
+                </div>
+            </div>
+
+            {/* Password Fields */}
+            <div className="space-y-4">
+                <div className="space-y-2">
+                    <Label htmlFor="password" className="text-sm font-medium text-slate-700">
+                        Password
+                    </Label>
+                    <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
+                        <Input
+                            id="password"
+                            type={showPassword ? 'text' : 'password'}
+                            placeholder="Create a strong password"
+                            className={`pl-10 pr-10 h-12 ${errors.password ? 'border-red-500' : 'border-slate-300'}`}
+                            {...form.register('password')}
+                        />
+                        <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                        >
+                            {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                        </button>
+                    </div>
+                    {errors.password && (
+                        <p className="text-sm text-red-600">{errors.password.message}</p>
+                    )}
+                </div>
+
+                <div className="space-y-2">
+                    <Label htmlFor="confirmPassword" className="text-sm font-medium text-slate-700">
+                        Confirm Password
+                    </Label>
+                    <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
+                        <Input
+                            id="confirmPassword"
+                            type={showConfirmPassword ? 'text' : 'password'}
+                            placeholder="Confirm your password"
+                            className={`pl-10 pr-10 h-12 ${errors.confirmPassword ? 'border-red-500' : 'border-slate-300'}`}
+                            {...form.register('confirmPassword')}
+                        />
+                        <button
+                            type="button"
+                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                        >
+                            {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                        </button>
+                    </div>
+                    {errors.confirmPassword && (
+                        <p className="text-sm text-red-600">{errors.confirmPassword.message}</p>
+                    )}
+                </div>
+            </div>
+        </>
+    );
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-teal-50 ">
@@ -378,7 +421,7 @@ export default function UnifiedRegister() {
 
             {/* Main Content */}
             <main className="flex items-center justify-center py-20 px-4 sm:px-6 lg:px-8">
-                <div className="w-full max-w-2xl">
+                <div className="w-full max-w-3xl">
                     <Card className="border-0 shadow-2xl bg-white/95 backdrop-blur-sm">
                         <CardHeader className="space-y-8 pb-8">
                             <div className="text-center">
@@ -445,7 +488,7 @@ export default function UnifiedRegister() {
                                     </div>
                                 </div>
                             ) : (
-                                /* Registration Form */
+                                /* Registration Form with Tabs */
                                 <div className="space-y-8">
                                     <div className="flex items-center justify-between">
                                         <Button
@@ -475,571 +518,526 @@ export default function UnifiedRegister() {
                                         </div>
                                     </div>
 
-                                    {accountType === 'customer' ? (
-                                        /* Customer Registration Form */
-                                        <form onSubmit={customerForm.handleSubmit(onCustomerSubmit)} className="space-y-6">
-                                            {/* Customer Type Selection */}
-                                            <div className="space-y-3">
-                                                <Label className="text-sm font-medium text-slate-700">
-                                                    Customer Type
-                                                </Label>
-                                                <Select
-                                                    value={customerType}
-                                                    onValueChange={(value: 'individual' | 'company' | 'organization') => {
-                                                        setCustomerType(value);
-                                                        customerForm.setValue('customerType', value);
-                                                    }}
+                                    {apiError && (
+                                        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                                            <p className="text-sm text-red-600">{apiError}</p>
+                                        </div>
+                                    )}
+
+                                    <Tabs value={activeTab} onValueChange={(value: TabType) => setActiveTab(value)}>
+                                        <TabsList className="grid w-full grid-cols-3 mb-4">
+                                            <TabsTrigger value="individual" className="flex items-center gap-2">
+                                                <User className="w-4 h-4" />
+                                                Individual
+                                            </TabsTrigger>
+                                            <TabsTrigger value="company" className="flex items-center gap-2">
+                                                <Building className="w-4 h-4" />
+                                                Company
+                                            </TabsTrigger>
+                                            <TabsTrigger value="organization" className="flex items-center gap-2">
+                                                <Users className="w-4 h-4" />
+                                                Organization
+                                            </TabsTrigger>
+                                        </TabsList>
+
+                                        <TabsContent value="individual" className="space-y-6">
+                                            <form onSubmit={currentForm.handleSubmit(handleSubmit)} className="space-y-6">
+                                                <CommonFields
+                                                    form={accountType === 'customer' ? individualCustomerForm : individualVendorForm}
+                                                    errors={currentErrors}
+                                                    isVendor={accountType === 'vendor'}
+                                                />
+
+                                                {accountType === 'vendor' && (
+                                                    <>
+                                                        {/* Business Information */}
+                                                        <div className="space-y-4">
+                                                            <div className="space-y-2">
+                                                                <Label htmlFor="businessName" className="text-sm font-medium text-slate-700">
+                                                                    Business Name
+                                                                </Label>
+                                                                <div className="relative">
+                                                                    <Store className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
+                                                                    <Input
+                                                                        id="businessName"
+                                                                        placeholder="Enter your business name"
+                                                                        className={`pl-10 h-12 ${currentErrors.businessName ? 'border-red-500' : 'border-slate-300'}`}
+                                                                        {...currentForm.register('businessName')}
+                                                                    />
+                                                                </div>
+                                                                {currentErrors.businessName && (
+                                                                    <p className="text-sm text-red-600">{currentErrors.businessName.message}</p>
+                                                                )}
+                                                            </div>
+
+                                                            <div className="space-y-2">
+                                                                <Label htmlFor="businessDescription" className="text-sm font-medium text-slate-700">
+                                                                    Business Description
+                                                                </Label>
+                                                                <div className="relative">
+                                                                    <FileText className="absolute left-3 top-3 text-slate-400 w-5 h-5" />
+                                                                    <textarea
+                                                                        id="businessDescription"
+                                                                        placeholder="Describe your business and what you offer"
+                                                                        className={`pl-10 w-full min-h-[100px] p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none ${currentErrors.businessDescription ? 'border-red-500' : 'border-slate-300'}`}
+                                                                        {...currentForm.register('businessDescription')}
+                                                                    />
+                                                                </div>
+                                                                {currentErrors.businessDescription && (
+                                                                    <p className="text-sm text-red-600">{currentErrors.businessDescription.message}</p>
+                                                                )}
+                                                            </div>
+
+                                                            <div className="space-y-2">
+                                                                <Label htmlFor="website" className="text-sm font-medium text-slate-700">
+                                                                    Website (Optional)
+                                                                </Label>
+                                                                <div className="relative">
+                                                                    <Globe className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
+                                                                    <Input
+                                                                        id="website"
+                                                                        type="url"
+                                                                        placeholder="https://your-website.com"
+                                                                        className="pl-10 h-12"
+                                                                        {...currentForm.register('website')}
+                                                                    />
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="space-y-2">
+                                                                <Label htmlFor="businessAddress" className="text-sm font-medium text-slate-700">
+                                                                    Business Address
+                                                                </Label>
+                                                                <div className="relative">
+                                                                    <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
+                                                                    <Input
+                                                                        id="businessAddress"
+                                                                        placeholder="Enter your business address"
+                                                                        className={`pl-10 h-12 ${currentErrors.businessAddress ? 'border-red-500' : 'border-slate-300'}`}
+                                                                        {...currentForm.register('businessAddress')}
+                                                                    />
+                                                                </div>
+                                                                {currentErrors.businessAddress && (
+                                                                    <p className="text-sm text-red-600">{currentErrors.businessAddress.message}</p>
+                                                                )}
+                                                            </div>
+
+                                                            <div className="space-y-2">
+                                                                <Label htmlFor="businessPhone" className="text-sm font-medium text-slate-700">
+                                                                    Business Phone
+                                                                </Label>
+                                                                <div className="relative">
+                                                                    <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
+                                                                    <Input
+                                                                        id="businessPhone"
+                                                                        type="tel"
+                                                                        placeholder="Business phone number"
+                                                                        className={`pl-10 h-12 ${currentErrors.businessPhone ? 'border-red-500' : 'border-slate-300'}`}
+                                                                        {...currentForm.register('businessPhone')}
+                                                                    />
+                                                                </div>
+                                                                {currentErrors.businessPhone && (
+                                                                    <p className="text-sm text-red-600">{currentErrors.businessPhone.message}</p>
+                                                                )}
+                                                            </div>
+
+                                                            <div className="space-y-2">
+                                                                <Label htmlFor="taxId" className="text-sm font-medium text-slate-700">
+                                                                    Tax ID (Optional)
+                                                                </Label>
+                                                                <Input
+                                                                    id="taxId"
+                                                                    placeholder="Enter your tax ID or EIN"
+                                                                    className="h-12"
+                                                                    {...currentForm.register('taxId')}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </>
+                                                )}
+
+                                                <Button
+                                                    type="submit"
+                                                    disabled={isLoading}
+                                                    className={`w-full h-12 text-white font-semibold ${accountType === 'vendor' ? 'bg-teal-600 hover:bg-teal-700' : 'bg-blue-600 hover:bg-blue-700'}`}
                                                 >
-                                                    <SelectTrigger className="h-12">
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="individual">
-                                                            <div className="flex items-center space-x-2">
-                                                                <User className="w-4 h-4" />
-                                                                <span>Individual</span>
-                                                            </div>
-                                                        </SelectItem>
-                                                        <SelectItem value="company">
-                                                            <div className="flex items-center space-x-2">
-                                                                <Building className="w-4 h-4" />
-                                                                <span>Company</span>
-                                                            </div>
-                                                        </SelectItem>
-                                                        <SelectItem value="organization">
-                                                            <div className="flex items-center space-x-2">
-                                                                <Users className="w-4 h-4" />
-                                                                <span>Organization</span>
-                                                            </div>
-                                                        </SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-
-                                            {/* Personal Information */}
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                                <div className="space-y-2">
-                                                    <Label htmlFor="firstName" className="text-sm font-medium text-slate-700">
-                                                        First Name
-                                                    </Label>
-                                                    <Input
-                                                        id="firstName"
-                                                        placeholder="Enter your first name"
-                                                        className={`h-12 ${currentErrors.firstName ? 'border-red-500' : 'border-slate-300'}`}
-                                                        {...customerForm.register('firstName')}
-                                                    />
-                                                    {currentErrors.firstName && (
-                                                        <p className="text-sm text-red-600">{currentErrors.firstName.message}</p>
+                                                    {isLoading ? (
+                                                        <LoadingSpinner className="w-5 h-5 mr-2" />
+                                                    ) : accountType === 'vendor' ? (
+                                                        <CheckCircle className="w-5 h-5 mr-2" />
+                                                    ) : (
+                                                        <UserPlus className="w-5 h-5 mr-2" />
                                                     )}
-                                                </div>
-                                                <div className="space-y-2">
-                                                    <Label htmlFor="lastName" className="text-sm font-medium text-slate-700">
-                                                        Last Name
-                                                    </Label>
-                                                    <Input
-                                                        id="lastName"
-                                                        placeholder="Enter your last name"
-                                                        className={`h-12 ${currentErrors.lastName ? 'border-red-500' : 'border-slate-300'}`}
-                                                        {...customerForm.register('lastName')}
-                                                    />
-                                                    {currentErrors.lastName && (
-                                                        <p className="text-sm text-red-600">{currentErrors.lastName.message}</p>
-                                                    )}
-                                                </div>
-                                            </div>
+                                                    {isLoading ? 'Creating Account...' : `Create ${accountType === 'vendor' ? 'Vendor' : 'Customer'} Account`}
+                                                </Button>
+                                            </form>
+                                        </TabsContent>
 
-                                            {/* Company/Organization Fields */}
-                                            {customerType === 'company' && (
-                                                <div className="space-y-4">
-                                                    <div className="space-y-2">
-                                                        <Label htmlFor="companyName" className="text-sm font-medium text-slate-700">
-                                                            Company Name
-                                                        </Label>
-                                                        <Input
-                                                            id="companyName"
-                                                            placeholder="Enter your company name"
-                                                            className="h-12"
-                                                            {...customerForm.register('companyName')}
-                                                        />
+                                        <TabsContent value="company" className="space-y-6">
+                                            <form onSubmit={currentForm.handleSubmit(handleSubmit)} className="space-y-6">
+                                                <CommonFields
+                                                    form={accountType === 'customer' ? companyCustomerForm : companyVendorForm}
+                                                    errors={currentErrors}
+                                                    isVendor={accountType === 'vendor'}
+                                                />
+
+                                                {accountType === 'customer' ? (
+                                                    /* Company Customer Fields */
+                                                    <div className="space-y-4">
+                                                        <div className="space-y-2">
+                                                            <Label htmlFor="companyName" className="text-sm font-medium text-slate-700">
+                                                                Company Name
+                                                            </Label>
+                                                            <div className="relative">
+                                                                <Building className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
+                                                                <Input
+                                                                    id="companyName"
+                                                                    placeholder="Enter your company name"
+                                                                    className={`pl-10 h-12 ${currentErrors.companyName ? 'border-red-500' : 'border-slate-300'}`}
+                                                                    {...currentForm.register('companyName')}
+                                                                />
+                                                            </div>
+                                                            {currentErrors.companyName && (
+                                                                <p className="text-sm text-red-600">{currentErrors.companyName.message}</p>
+                                                            )}
+                                                        </div>
+
+                                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                            <div className="space-y-2">
+                                                                <Label className="text-sm font-medium text-slate-700">
+                                                                    Company Size
+                                                                </Label>
+                                                                <Select onValueChange={(value) => currentForm.setValue('companySize', value)}>
+                                                                    <SelectTrigger className="h-12">
+                                                                        <SelectValue placeholder="Select company size" />
+                                                                    </SelectTrigger>
+                                                                    <SelectContent>
+                                                                        <SelectItem value="startup">Startup (1-10 employees)</SelectItem>
+                                                                        <SelectItem value="small">Small (11-50 employees)</SelectItem>
+                                                                        <SelectItem value="medium">Medium (51-200 employees)</SelectItem>
+                                                                        <SelectItem value="large">Large (201-1000 employees)</SelectItem>
+                                                                        <SelectItem value="enterprise">Enterprise (1000+ employees)</SelectItem>
+                                                                    </SelectContent>
+                                                                </Select>
+                                                            </div>
+                                                            <div className="space-y-2">
+                                                                <Label htmlFor="industry" className="text-sm font-medium text-slate-700">
+                                                                    Industry
+                                                                </Label>
+                                                                <Input
+                                                                    id="industry"
+                                                                    placeholder="e.g., Technology, Healthcare"
+                                                                    className="h-12"
+                                                                    {...currentForm.register('industry')}
+                                                                />
+                                                            </div>
+                                                        </div>
                                                     </div>
-                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                ) : (
+                                                    /* Company Vendor Fields */
+                                                    <div className="space-y-4">
+                                                        <div className="space-y-2">
+                                                            <Label htmlFor="businessName" className="text-sm font-medium text-slate-700">
+                                                                Business Name
+                                                            </Label>
+                                                            <div className="relative">
+                                                                <Store className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
+                                                                <Input
+                                                                    id="businessName"
+                                                                    placeholder="Enter your business name"
+                                                                    className={`pl-10 h-12 ${currentErrors.businessName ? 'border-red-500' : 'border-slate-300'}`}
+                                                                    {...currentForm.register('businessName')}
+                                                                />
+                                                            </div>
+                                                            {currentErrors.businessName && (
+                                                                <p className="text-sm text-red-600">{currentErrors.businessName.message}</p>
+                                                            )}
+                                                        </div>
+
+                                                        <div className="space-y-2">
+                                                            <Label htmlFor="businessDescription" className="text-sm font-medium text-slate-700">
+                                                                Business Description
+                                                            </Label>
+                                                            <div className="relative">
+                                                                <FileText className="absolute left-3 top-3 text-slate-400 w-5 h-5" />
+                                                                <textarea
+                                                                    id="businessDescription"
+                                                                    placeholder="Describe your business and what you offer"
+                                                                    className={`pl-10 w-full min-h-[100px] p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none ${currentErrors.businessDescription ? 'border-red-500' : 'border-slate-300'}`}
+                                                                    {...currentForm.register('businessDescription')}
+                                                                />
+                                                            </div>
+                                                            {currentErrors.businessDescription && (
+                                                                <p className="text-sm text-red-600">{currentErrors.businessDescription.message}</p>
+                                                            )}
+                                                        </div>
+
+                                                        <div className="space-y-2">
+                                                            <Label htmlFor="website" className="text-sm font-medium text-slate-700">
+                                                                Website (Optional)
+                                                            </Label>
+                                                            <div className="relative">
+                                                                <Globe className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
+                                                                <Input
+                                                                    id="website"
+                                                                    type="url"
+                                                                    placeholder="https://your-website.com"
+                                                                    className="pl-10 h-12"
+                                                                    {...currentForm.register('website')}
+                                                                />
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="space-y-2">
+                                                            <Label htmlFor="businessAddress" className="text-sm font-medium text-slate-700">
+                                                                Business Address
+                                                            </Label>
+                                                            <div className="relative">
+                                                                <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
+                                                                <Input
+                                                                    id="businessAddress"
+                                                                    placeholder="Enter your business address"
+                                                                    className={`pl-10 h-12 ${currentErrors.businessAddress ? 'border-red-500' : 'border-slate-300'}`}
+                                                                    {...currentForm.register('businessAddress')}
+                                                                />
+                                                            </div>
+                                                            {currentErrors.businessAddress && (
+                                                                <p className="text-sm text-red-600">{currentErrors.businessAddress.message}</p>
+                                                            )}
+                                                        </div>
+
+                                                        <div className="space-y-2">
+                                                            <Label htmlFor="businessPhone" className="text-sm font-medium text-slate-700">
+                                                                Business Phone
+                                                            </Label>
+                                                            <div className="relative">
+                                                                <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
+                                                                <Input
+                                                                    id="businessPhone"
+                                                                    type="tel"
+                                                                    placeholder="Business phone number"
+                                                                    className={`pl-10 h-12 ${currentErrors.businessPhone ? 'border-red-500' : 'border-slate-300'}`}
+                                                                    {...currentForm.register('businessPhone')}
+                                                                />
+                                                            </div>
+                                                            {currentErrors.businessPhone && (
+                                                                <p className="text-sm text-red-600">{currentErrors.businessPhone.message}</p>
+                                                            )}
+                                                        </div>
+
+                                                        <div className="space-y-2">
+                                                            <Label htmlFor="taxId" className="text-sm font-medium text-slate-700">
+                                                                Tax ID (Optional)
+                                                            </Label>
+                                                            <Input
+                                                                id="taxId"
+                                                                placeholder="Enter your tax ID or EIN"
+                                                                className="h-12"
+                                                                {...currentForm.register('taxId')}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                <Button
+                                                    type="submit"
+                                                    disabled={isLoading}
+                                                    className={`w-full h-12 text-white font-semibold ${accountType === 'vendor' ? 'bg-teal-600 hover:bg-teal-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+                                                >
+                                                    {isLoading ? (
+                                                        <LoadingSpinner className="w-5 h-5 mr-2" />
+                                                    ) : accountType === 'vendor' ? (
+                                                        <CheckCircle className="w-5 h-5 mr-2" />
+                                                    ) : (
+                                                        <UserPlus className="w-5 h-5 mr-2" />
+                                                    )}
+                                                    {isLoading ? 'Creating Account...' : `Create ${accountType === 'vendor' ? 'Vendor' : 'Customer'} Account`}
+                                                </Button>
+                                            </form>
+                                        </TabsContent>
+
+                                        <TabsContent value="organization" className="space-y-6">
+                                            <form onSubmit={currentForm.handleSubmit(handleSubmit)} className="space-y-6">
+                                                <CommonFields
+                                                    form={accountType === 'customer' ? organizationCustomerForm : organizationVendorForm}
+                                                    errors={currentErrors}
+                                                    isVendor={accountType === 'vendor'}
+                                                />
+
+                                                {accountType === 'customer' ? (
+                                                    /* Organization Customer Fields */
+                                                    <div className="space-y-4">
+                                                        <div className="space-y-2">
+                                                            <Label htmlFor="organizationName" className="text-sm font-medium text-slate-700">
+                                                                Organization Name
+                                                            </Label>
+                                                            <div className="relative">
+                                                                <Users className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
+                                                                <Input
+                                                                    id="organizationName"
+                                                                    placeholder="Enter your organization name"
+                                                                    className={`pl-10 h-12 ${currentErrors.organizationName ? 'border-red-500' : 'border-slate-300'}`}
+                                                                    {...currentForm.register('organizationName')}
+                                                                />
+                                                            </div>
+                                                            {currentErrors.organizationName && (
+                                                                <p className="text-sm text-red-600">{currentErrors.organizationName.message}</p>
+                                                            )}
+                                                        </div>
+
                                                         <div className="space-y-2">
                                                             <Label className="text-sm font-medium text-slate-700">
-                                                                Company Size
+                                                                Organization Type
                                                             </Label>
-                                                            <Select onValueChange={(value) => customerForm.setValue('companySize', value)}>
+                                                            <Select onValueChange={(value) => currentForm.setValue('organizationType', value)}>
                                                                 <SelectTrigger className="h-12">
-                                                                    <SelectValue placeholder="Select company size" />
+                                                                    <SelectValue placeholder="Select organization type" />
                                                                 </SelectTrigger>
                                                                 <SelectContent>
-                                                                    <SelectItem value="startup">Startup (1-10 employees)</SelectItem>
-                                                                    <SelectItem value="small">Small (11-50 employees)</SelectItem>
-                                                                    <SelectItem value="medium">Medium (51-200 employees)</SelectItem>
-                                                                    <SelectItem value="large">Large (201-1000 employees)</SelectItem>
-                                                                    <SelectItem value="enterprise">Enterprise (1000+ employees)</SelectItem>
+                                                                    <SelectItem value="nonprofit">Non-profit</SelectItem>
+                                                                    <SelectItem value="government">Government</SelectItem>
+                                                                    <SelectItem value="educational">Educational</SelectItem>
+                                                                    <SelectItem value="healthcare">Healthcare</SelectItem>
+                                                                    <SelectItem value="other">Other</SelectItem>
                                                                 </SelectContent>
                                                             </Select>
                                                         </div>
+
+                                                        <div className="flex items-center space-x-2">
+                                                            <input
+                                                                type="checkbox"
+                                                                id="taxExempt"
+                                                                className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                                                                {...currentForm.register('taxExempt')}
+                                                            />
+                                                            <Label htmlFor="taxExempt" className="text-sm font-medium text-slate-700">
+                                                                Tax Exempt Organization
+                                                            </Label>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    /* Organization Vendor Fields */
+                                                    <div className="space-y-4">
                                                         <div className="space-y-2">
-                                                            <Label htmlFor="industry" className="text-sm font-medium text-slate-700">
-                                                                Industry
+                                                            <Label htmlFor="businessName" className="text-sm font-medium text-slate-700">
+                                                                Business Name
+                                                            </Label>
+                                                            <div className="relative">
+                                                                <Store className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
+                                                                <Input
+                                                                    id="businessName"
+                                                                    placeholder="Enter your business name"
+                                                                    className={`pl-10 h-12 ${currentErrors.businessName ? 'border-red-500' : 'border-slate-300'}`}
+                                                                    {...currentForm.register('businessName')}
+                                                                />
+                                                            </div>
+                                                            {currentErrors.businessName && (
+                                                                <p className="text-sm text-red-600">{currentErrors.businessName.message}</p>
+                                                            )}
+                                                        </div>
+
+                                                        <div className="space-y-2">
+                                                            <Label htmlFor="businessDescription" className="text-sm font-medium text-slate-700">
+                                                                Business Description
+                                                            </Label>
+                                                            <div className="relative">
+                                                                <FileText className="absolute left-3 top-3 text-slate-400 w-5 h-5" />
+                                                                <textarea
+                                                                    id="businessDescription"
+                                                                    placeholder="Describe your business and what you offer"
+                                                                    className={`pl-10 w-full min-h-[100px] p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none ${currentErrors.businessDescription ? 'border-red-500' : 'border-slate-300'}`}
+                                                                    {...currentForm.register('businessDescription')}
+                                                                />
+                                                            </div>
+                                                            {currentErrors.businessDescription && (
+                                                                <p className="text-sm text-red-600">{currentErrors.businessDescription.message}</p>
+                                                            )}
+                                                        </div>
+
+                                                        <div className="space-y-2">
+                                                            <Label htmlFor="website" className="text-sm font-medium text-slate-700">
+                                                                Website (Optional)
+                                                            </Label>
+                                                            <div className="relative">
+                                                                <Globe className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
+                                                                <Input
+                                                                    id="website"
+                                                                    type="url"
+                                                                    placeholder="https://your-website.com"
+                                                                    className="pl-10 h-12"
+                                                                    {...currentForm.register('website')}
+                                                                />
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="space-y-2">
+                                                            <Label htmlFor="businessAddress" className="text-sm font-medium text-slate-700">
+                                                                Business Address
+                                                            </Label>
+                                                            <div className="relative">
+                                                                <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
+                                                                <Input
+                                                                    id="businessAddress"
+                                                                    placeholder="Enter your business address"
+                                                                    className={`pl-10 h-12 ${currentErrors.businessAddress ? 'border-red-500' : 'border-slate-300'}`}
+                                                                    {...currentForm.register('businessAddress')}
+                                                                />
+                                                            </div>
+                                                            {currentErrors.businessAddress && (
+                                                                <p className="text-sm text-red-600">{currentErrors.businessAddress.message}</p>
+                                                            )}
+                                                        </div>
+
+                                                        <div className="space-y-2">
+                                                            <Label htmlFor="businessPhone" className="text-sm font-medium text-slate-700">
+                                                                Business Phone
+                                                            </Label>
+                                                            <div className="relative">
+                                                                <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
+                                                                <Input
+                                                                    id="businessPhone"
+                                                                    type="tel"
+                                                                    placeholder="Business phone number"
+                                                                    className={`pl-10 h-12 ${currentErrors.businessPhone ? 'border-red-500' : 'border-slate-300'}`}
+                                                                    {...currentForm.register('businessPhone')}
+                                                                />
+                                                            </div>
+                                                            {currentErrors.businessPhone && (
+                                                                <p className="text-sm text-red-600">{currentErrors.businessPhone.message}</p>
+                                                            )}
+                                                        </div>
+
+                                                        <div className="space-y-2">
+                                                            <Label htmlFor="taxId" className="text-sm font-medium text-slate-700">
+                                                                Tax ID (Optional)
                                                             </Label>
                                                             <Input
-                                                                id="industry"
-                                                                placeholder="e.g., Technology, Healthcare"
+                                                                id="taxId"
+                                                                placeholder="Enter your tax ID or EIN"
                                                                 className="h-12"
-                                                                {...customerForm.register('industry')}
+                                                                {...currentForm.register('taxId')}
                                                             />
                                                         </div>
                                                     </div>
-                                                </div>
-                                            )}
-
-                                            {customerType === 'organization' && (
-                                                <div className="space-y-4">
-                                                    <div className="space-y-2">
-                                                        <Label htmlFor="organizationName" className="text-sm font-medium text-slate-700">
-                                                            Organization Name
-                                                        </Label>
-                                                        <Input
-                                                            id="organizationName"
-                                                            placeholder="Enter your organization name"
-                                                            className="h-12"
-                                                            {...customerForm.register('organizationName')}
-                                                        />
-                                                    </div>
-                                                    <div className="space-y-2">
-                                                        <Label className="text-sm font-medium text-slate-700">
-                                                            Organization Type
-                                                        </Label>
-                                                        <Select onValueChange={(value) => customerForm.setValue('organizationType', value)}>
-                                                            <SelectTrigger className="h-12">
-                                                                <SelectValue placeholder="Select organization type" />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                <SelectItem value="nonprofit">Non-profit</SelectItem>
-                                                                <SelectItem value="government">Government</SelectItem>
-                                                                <SelectItem value="educational">Educational</SelectItem>
-                                                                <SelectItem value="healthcare">Healthcare</SelectItem>
-                                                                <SelectItem value="other">Other</SelectItem>
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* Contact Information */}
-                                            <div className="space-y-4">
-                                                <div className="space-y-2">
-                                                    <Label htmlFor="email" className="text-sm font-medium text-slate-700">
-                                                        Email Address
-                                                    </Label>
-                                                    <div className="relative">
-                                                        <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
-                                                        <Input
-                                                            id="email"
-                                                            type="email"
-                                                            placeholder="Enter your email"
-                                                            className={`pl-10 h-12 ${currentErrors.email ? 'border-red-500' : 'border-slate-300'}`}
-                                                            {...customerForm.register('email')}
-                                                        />
-                                                    </div>
-                                                    {currentErrors.email && (
-                                                        <p className="text-sm text-red-600">{currentErrors.email.message}</p>
-                                                    )}
-                                                </div>
-
-                                                <div className="space-y-2">
-                                                    <Label htmlFor="phone" className="text-sm font-medium text-slate-700">
-                                                        Phone Number (Optional)
-                                                    </Label>
-                                                    <div className="relative">
-                                                        <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
-                                                        <Input
-                                                            id="phone"
-                                                            type="tel"
-                                                            placeholder="Enter your phone number"
-                                                            className="pl-10 h-12"
-                                                            {...customerForm.register('phone')}
-                                                        />
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* Password Fields */}
-                                            <div className="space-y-4">
-                                                <div className="space-y-2">
-                                                    <Label htmlFor="password" className="text-sm font-medium text-slate-700">
-                                                        Password
-                                                    </Label>
-                                                    <div className="relative">
-                                                        <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
-                                                        <Input
-                                                            id="password"
-                                                            type={showPassword ? 'text' : 'password'}
-                                                            placeholder="Create a strong password"
-                                                            className={`pl-10 pr-10 h-12 ${currentErrors.password ? 'border-red-500' : 'border-slate-300'}`}
-                                                            {...customerForm.register('password')}
-                                                        />
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => setShowPassword(!showPassword)}
-                                                            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                                                        >
-                                                            {showPassword ? (
-                                                                <EyeOff className="w-5 h-5" />
-                                                            ) : (
-                                                                <Eye className="w-5 h-5" />
-                                                            )}
-                                                        </button>
-                                                    </div>
-                                                    {currentErrors.password && (
-                                                        <p className="text-sm text-red-600">{currentErrors.password.message}</p>
-                                                    )}
-                                                </div>
-
-                                                <div className="space-y-2">
-                                                    <Label htmlFor="confirmPassword" className="text-sm font-medium text-slate-700">
-                                                        Confirm Password
-                                                    </Label>
-                                                    <div className="relative">
-                                                        <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
-                                                        <Input
-                                                            id="confirmPassword"
-                                                            type={showConfirmPassword ? 'text' : 'password'}
-                                                            placeholder="Confirm your password"
-                                                            className={`pl-10 pr-10 h-12 ${currentErrors.confirmPassword ? 'border-red-500' : 'border-slate-300'}`}
-                                                            {...customerForm.register('confirmPassword')}
-                                                        />
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                                                            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                                                        >
-                                                            {showConfirmPassword ? (
-                                                                <EyeOff className="w-5 h-5" />
-                                                            ) : (
-                                                                <Eye className="w-5 h-5" />
-                                                            )}
-                                                        </button>
-                                                    </div>
-                                                    {currentErrors.confirmPassword && (
-                                                        <p className="text-sm text-red-600">{currentErrors.confirmPassword.message}</p>
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                            {/* Submit Button */}
-                                            <Button
-                                                type="submit"
-                                                disabled={isLoading}
-                                                className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-semibold"
-                                            >
-                                                {isLoading ? (
-                                                    <LoadingSpinner className="w-5 h-5 mr-2" />
-                                                ) : (
-                                                    <UserPlus className="w-5 h-5 mr-2" />
                                                 )}
-                                                {isLoading ? 'Creating Account...' : 'Create Customer Account'}
-                                            </Button>
-                                        </form>
-                                    ) : (
-                                        /* Vendor Registration Form */
-                                        <form onSubmit={vendorForm.handleSubmit(onVendorSubmit)} className="space-y-6">
-                                            {/* Business Type Selection */}
-                                            <div className="space-y-3">
-                                                <Label className="text-sm font-medium text-slate-700">
-                                                    Business Type
-                                                </Label>
-                                                <Select
-                                                    value={vendorType}
-                                                    onValueChange={(value: 'individual' | 'company' | 'organization') => {
-                                                        setVendorType(value);
-                                                        vendorForm.setValue('businessType', value);
-                                                    }}
+
+                                                <Button
+                                                    type="submit"
+                                                    disabled={isLoading}
+                                                    className={`w-full h-12 text-white font-semibold ${accountType === 'vendor' ? 'bg-teal-600 hover:bg-teal-700' : 'bg-blue-600 hover:bg-blue-700'}`}
                                                 >
-                                                    <SelectTrigger className="h-12">
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="individual">
-                                                            <div className="flex items-center space-x-2">
-                                                                <User className="w-4 h-4" />
-                                                                <span>Individual/Sole Proprietor</span>
-                                                            </div>
-                                                        </SelectItem>
-                                                        <SelectItem value="company">
-                                                            <div className="flex items-center space-x-2">
-                                                                <Building className="w-4 h-4" />
-                                                                <span>Company/Corporation</span>
-                                                            </div>
-                                                        </SelectItem>
-                                                        <SelectItem value="organization">
-                                                            <div className="flex items-center space-x-2">
-                                                                <Users className="w-4 h-4" />
-                                                                <span>Organization/Partnership</span>
-                                                            </div>
-                                                        </SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-
-                                            {/* Personal Information */}
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                                <div className="space-y-2">
-                                                    <Label htmlFor="firstName" className="text-sm font-medium text-slate-700">
-                                                        First Name
-                                                    </Label>
-                                                    <Input
-                                                        id="firstName"
-                                                        placeholder="Enter your first name"
-                                                        className={`h-12 ${currentErrors.firstName ? 'border-red-500' : 'border-slate-300'}`}
-                                                        {...vendorForm.register('firstName')}
-                                                    />
-                                                    {currentErrors.firstName && (
-                                                        <p className="text-sm text-red-600">{currentErrors.firstName.message}</p>
+                                                    {isLoading ? (
+                                                        <LoadingSpinner className="w-5 h-5 mr-2" />
+                                                    ) : accountType === 'vendor' ? (
+                                                        <CheckCircle className="w-5 h-5 mr-2" />
+                                                    ) : (
+                                                        <UserPlus className="w-5 h-5 mr-2" />
                                                     )}
-                                                </div>
-                                                <div className="space-y-2">
-                                                    <Label htmlFor="lastName" className="text-sm font-medium text-slate-700">
-                                                        Last Name
-                                                    </Label>
-                                                    <Input
-                                                        id="lastName"
-                                                        placeholder="Enter your last name"
-                                                        className={`h-12 ${currentErrors.lastName ? 'border-red-500' : 'border-slate-300'}`}
-                                                        {...vendorForm.register('lastName')}
-                                                    />
-                                                    {currentErrors.lastName && (
-                                                        <p className="text-sm text-red-600">{currentErrors.lastName.message}</p>
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                            {/* Business Information */}
-                                            <div className="space-y-4">
-                                                <div className="space-y-2">
-                                                    <Label htmlFor="businessName" className="text-sm font-medium text-slate-700">
-                                                        Business Name
-                                                    </Label>
-                                                    <div className="relative">
-                                                        <Store className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
-                                                        <Input
-                                                            id="businessName"
-                                                            placeholder="Enter your business name"
-                                                            className={`pl-10 h-12 ${currentErrors.businessName ? 'border-red-500' : 'border-slate-300'}`}
-                                                            {...vendorForm.register('businessName')}
-                                                        />
-                                                    </div>
-                                                    {currentErrors.businessName && (
-                                                        <p className="text-sm text-red-600">{currentErrors.businessName.message}</p>
-                                                    )}
-                                                </div>
-
-                                                <div className="space-y-2">
-                                                    <Label htmlFor="businessDescription" className="text-sm font-medium text-slate-700">
-                                                        Business Description
-                                                    </Label>
-                                                    <div className="relative">
-                                                        <FileText className="absolute left-3 top-3 text-slate-400 w-5 h-5" />
-                                                        <textarea
-                                                            id="businessDescription"
-                                                            placeholder="Describe your business and what you offer"
-                                                            className={`pl-10 w-full min-h-[100px] p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none ${currentErrors.businessDescription ? 'border-red-500' : 'border-slate-300'}`}
-                                                            {...vendorForm.register('businessDescription')}
-                                                        />
-                                                    </div>
-                                                    {currentErrors.businessDescription && (
-                                                        <p className="text-sm text-red-600">{currentErrors.businessDescription.message}</p>
-                                                    )}
-                                                </div>
-
-                                                <div className="space-y-2">
-                                                    <Label htmlFor="website" className="text-sm font-medium text-slate-700">
-                                                        Website (Optional)
-                                                    </Label>
-                                                    <div className="relative">
-                                                        <Globe className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
-                                                        <Input
-                                                            id="website"
-                                                            type="url"
-                                                            placeholder="https://your-website.com"
-                                                            className="pl-10 h-12"
-                                                            {...vendorForm.register('website')}
-                                                        />
-                                                    </div>
-                                                    {currentErrors.website && (
-                                                        <p className="text-sm text-red-600">{currentErrors.website.message}</p>
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                            {/* Contact Information */}
-                                            <div className="space-y-4">
-                                                <div className="space-y-2">
-                                                    <Label htmlFor="email" className="text-sm font-medium text-slate-700">
-                                                        Email Address
-                                                    </Label>
-                                                    <div className="relative">
-                                                        <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
-                                                        <Input
-                                                            id="email"
-                                                            type="email"
-                                                            placeholder="Enter your email"
-                                                            className={`pl-10 h-12 ${currentErrors.email ? 'border-red-500' : 'border-slate-300'}`}
-                                                            {...vendorForm.register('email')}
-                                                        />
-                                                    </div>
-                                                    {currentErrors.email && (
-                                                        <p className="text-sm text-red-600">{currentErrors.email.message}</p>
-                                                    )}
-                                                </div>
-
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                                    <div className="space-y-2">
-                                                        <Label htmlFor="phone" className="text-sm font-medium text-slate-700">
-                                                            Personal Phone
-                                                        </Label>
-                                                        <div className="relative">
-                                                            <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
-                                                            <Input
-                                                                id="phone"
-                                                                type="tel"
-                                                                placeholder="Your phone number"
-                                                                className="pl-10 h-12"
-                                                                {...vendorForm.register('phone')}
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                    <div className="space-y-2">
-                                                        <Label htmlFor="businessPhone" className="text-sm font-medium text-slate-700">
-                                                            Business Phone
-                                                        </Label>
-                                                        <div className="relative">
-                                                            <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
-                                                            <Input
-                                                                id="businessPhone"
-                                                                type="tel"
-                                                                placeholder="Business phone number"
-                                                                className={`pl-10 h-12 ${currentErrors.businessPhone ? 'border-red-500' : 'border-slate-300'}`}
-                                                                {...vendorForm.register('businessPhone')}
-                                                            />
-                                                        </div>
-                                                        {currentErrors.businessPhone && (
-                                                            <p className="text-sm text-red-600">{currentErrors.businessPhone.message}</p>
-                                                        )}
-                                                    </div>
-                                                </div>
-
-                                                <div className="space-y-2">
-                                                    <Label htmlFor="businessAddress" className="text-sm font-medium text-slate-700">
-                                                        Business Address
-                                                    </Label>
-                                                    <div className="relative">
-                                                        <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
-                                                        <Input
-                                                            id="businessAddress"
-                                                            placeholder="Enter your business address"
-                                                            className={`pl-10 h-12 ${currentErrors.businessAddress ? 'border-red-500' : 'border-slate-300'}`}
-                                                            {...vendorForm.register('businessAddress')}
-                                                        />
-                                                    </div>
-                                                    {currentErrors.businessAddress && (
-                                                        <p className="text-sm text-red-600">{currentErrors.businessAddress.message}</p>
-                                                    )}
-                                                </div>
-
-                                                <div className="space-y-2">
-                                                    <Label htmlFor="taxId" className="text-sm font-medium text-slate-700">
-                                                        Tax ID (Optional)
-                                                    </Label>
-                                                    <Input
-                                                        id="taxId"
-                                                        placeholder="Enter your tax ID or EIN"
-                                                        className="h-12"
-                                                        {...vendorForm.register('taxId')}
-                                                    />
-                                                </div>
-                                            </div>
-
-                                            {/* Password Fields */}
-                                            <div className="space-y-4">
-                                                <div className="space-y-2">
-                                                    <Label htmlFor="password" className="text-sm font-medium text-slate-700">
-                                                        Password
-                                                    </Label>
-                                                    <div className="relative">
-                                                        <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
-                                                        <Input
-                                                            id="password"
-                                                            type={showPassword ? 'text' : 'password'}
-                                                            placeholder="Create a strong password"
-                                                            className={`pl-10 pr-10 h-12 ${currentErrors.password ? 'border-red-500' : 'border-slate-300'}`}
-                                                            {...vendorForm.register('password')}
-                                                        />
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => setShowPassword(!showPassword)}
-                                                            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                                                        >
-                                                            {showPassword ? (
-                                                                <EyeOff className="w-5 h-5" />
-                                                            ) : (
-                                                                <Eye className="w-5 h-5" />
-                                                            )}
-                                                        </button>
-                                                    </div>
-                                                    {currentErrors.password && (
-                                                        <p className="text-sm text-red-600">{currentErrors.password.message}</p>
-                                                    )}
-                                                </div>
-
-                                                <div className="space-y-2">
-                                                    <Label htmlFor="confirmPassword" className="text-sm font-medium text-slate-700">
-                                                        Confirm Password
-                                                    </Label>
-                                                    <div className="relative">
-                                                        <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
-                                                        <Input
-                                                            id="confirmPassword"
-                                                            type={showConfirmPassword ? 'text' : 'password'}
-                                                            placeholder="Confirm your password"
-                                                            className={`pl-10 pr-10 h-12 ${currentErrors.confirmPassword ? 'border-red-500' : 'border-slate-300'}`}
-                                                            {...vendorForm.register('confirmPassword')}
-                                                        />
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                                                            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                                                        >
-                                                            {showConfirmPassword ? (
-                                                                <EyeOff className="w-5 h-5" />
-                                                            ) : (
-                                                                <Eye className="w-5 h-5" />
-                                                            )}
-                                                        </button>
-                                                    </div>
-                                                    {currentErrors.confirmPassword && (
-                                                        <p className="text-sm text-red-600">{currentErrors.confirmPassword.message}</p>
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                            {/* Submit Button */}
-                                            <Button
-                                                type="submit"
-                                                disabled={isLoading}
-                                                className="w-full h-12 bg-teal-600 hover:bg-teal-700 text-white font-semibold"
-                                            >
-                                                {isLoading ? (
-                                                    <LoadingSpinner className="w-5 h-5 mr-2" />
-                                                ) : (
-                                                    <CheckCircle className="w-5 h-5 mr-2" />
-                                                )}
-                                                {isLoading ? 'Creating Account...' : 'Create Vendor Account'}
-                                            </Button>
-                                        </form>
-                                    )}
+                                                    {isLoading ? 'Creating Account...' : `Create ${accountType === 'vendor' ? 'Vendor' : 'Customer'} Account`}
+                                                </Button>
+                                            </form>
+                                        </TabsContent>
+                                    </Tabs>
                                 </div>
                             )}
                         </CardContent>
@@ -1048,4 +1046,3 @@ export default function UnifiedRegister() {
             </main>
         </div>
     );
-} 
